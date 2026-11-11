@@ -9,16 +9,10 @@ class ExternalPlantApi {
         const response = await fetch(`https://perenual.com/api/v2/species-list?key=${apiKey}&q=${query}`)
         const data = await response.json()
 
-        console.log("Dados recebidos da API externa:", data); // Log para depuração
-
         return data.data.map(plant => ({
             id: plant.id,
             name: plant.scientific_name[0] || "Desconhecido",
             commonName: plant.common_name || "Sem nome popular",
-            water: plant.watering || "A cada 7 dias",
-            light: "Luz indireta",
-            sunlight: "Indireta",
-            fertilization: "30 dias", // A Perenual detalha isso em outro endpoint, então usamos um fallback
             image: plant.default_image.thumbnail || plant.default_image.original_url
         }));
     }
@@ -30,10 +24,34 @@ class ExternalPlantApi {
             throw new Error("API Key da API externa não configurada no .env");
         }
 
-        const response = await fetch(`https://perenual.com/api/v2/species/details/${id}?key=${apiKey}&q=${query}`)
-        const data = await response.json()
+        const response = await fetch(
+            `https://perenual.com/api/v2/species/details/${encodeURIComponent(id)}?key=${encodeURIComponent(apiKey)}`
+        );
 
-        console.log("Dados recebidos da API externa:", data); // Log para depuração
+        if (!response.ok) {
+            const error = new Error(`External plant API returned status ${response.status}`);
+            error.statusCode = response.status;
+            throw error;
+        }
+
+        const plant = await response.json();
+
+        if (!plant || typeof plant !== "object" || Array.isArray(plant) || !plant.id) {
+            throw new Error("External plant API returned an invalid plant");
+        }
+
+        const wateringBenchmark = plant.watering_general_benchmark || {};
+
+        return {
+            id: plant.id,
+            name: plant.scientific_name[0] || "Desconhecido",
+            commonName: plant.common_name || "Sem nome popular",
+            water: plant.watering || '',
+            wateringDays: wateringBenchmark.value ?? null,
+            wateringUnit: wateringBenchmark.unit ?? null,
+            sunlight: plant.sunlight,
+            image: plant.default_image?.thumbnail || plant.default_image?.original_url || null
+        };
     }
 }
 
